@@ -97,31 +97,14 @@ async function getChatSessionsByDate(client, targetDate) {
     log(`Found ${sessions.length} sessions matching the date filter`, 'SUCCESS');
     
     if (sessions.length > 0) {
-      const sampleIds = sessions.slice(0, 3).map(s => s._id.toString());
-      log(`Sample session IDs: ${sampleIds.join(', ')}`);
+      const sampleIds = sessions.slice(0, 5).map(s => s._id.toString());
+      log(`Sample session IDs (first 5): ${sampleIds.join(', ')}`);
+      log(`Total sessions found: ${sessions.length}`);
     }
     
-    // Select 4 sessions if >= 4, otherwise return all
-    if (sessions.length >= 4) {
-      const selectedSessions = [];
-      const usedIndices = new Set();
-      
-      while (selectedSessions.length < 4 && usedIndices.size < sessions.length) {
-        const randomIndex = Math.floor(Math.random() * sessions.length);
-        if (!usedIndices.has(randomIndex)) {
-          usedIndices.add(randomIndex);
-          selectedSessions.push(sessions[randomIndex]);
-        }
-      }
-      
-      log(`Randomly selected 4 sessions from ${sessions.length} total sessions`);
-      const selectedIds = selectedSessions.map(s => s._id.toString());
-      log(`Selected session IDs: ${selectedIds.join(', ')}`);
-      return selectedSessions;
-    } else {
-      log(`Returning all ${sessions.length} sessions (less than 4 found)`);
-      return sessions;
-    }
+    // Return all sessions found
+    log(`Returning all ${sessions.length} sessions found for the date`);
+    return sessions;
   } catch (error) {
     log(`Error querying database: ${error.message}`, 'ERROR');
     return [];
@@ -268,7 +251,7 @@ async function saveResultsToJson(results, filename = null) {
 }
 
 // Main processing function
-async function getSessionsAndProcessWithAgent(targetDate, outputFilename = null) {
+async function getSessionsAndProcessWithAgent(targetDate) {
   log(`Starting enhanced workflow + agent processing for date: ${targetDate}`, 'PROCESS');
   log('='.repeat(60));
   
@@ -290,8 +273,14 @@ async function getSessionsAndProcessWithAgent(targetDate, outputFilename = null)
     }
     
     const sessionIds = sessions.map(session => session._id.toString());
-    log(`Processing ${sessionIds.length} session IDs through workflow + agent`);
-    log(`Session IDs to process: ${sessionIds.join(', ')}`);
+    log(`Processing ALL ${sessionIds.length} session IDs through workflow + agent`);
+    log(`All session IDs to process: ${sessionIds.join(', ')}`);
+    
+    // Add batch processing info for large numbers
+    if (sessionIds.length > 10) {
+      log(`⚠️ Large batch detected: ${sessionIds.length} sessions. This may take a while...`, 'WARN');
+      log(`Estimated processing time: ${Math.ceil(sessionIds.length * 1.5)} - ${Math.ceil(sessionIds.length * 3)} minutes`, 'INFO');
+    }
     
     // Structure to hold all results
     const completeResults = {
@@ -380,18 +369,13 @@ async function getSessionsAndProcessWithAgent(targetDate, outputFilename = null)
     log(`Results: ${successfulCount} successful, ${workflowErrorCount} workflow errors, ${agentErrorCount} agent errors, ${otherErrorCount} other errors`);
     log(`Success rate: ${completeResults.metadata.summary.success_rate}`);
     
-    // Save results to JSON file
-    const savedFilename = await saveResultsToJson(completeResults, outputFilename);
-    
-    if (savedFilename) {
-      log(`All results saved to: ${savedFilename}`, 'SAVE');
-    }
+    // Return all results in response without saving to file
+    log('Returning complete results in API response', 'SUCCESS');
     
     return {
       success: true,
       message: 'Processing completed successfully',
-      data: completeResults,
-      saved_file: savedFilename
+      data: completeResults
     };
     
   } catch (error) {
@@ -415,7 +399,7 @@ app.get('/', (req, res) => {
     message: 'Chat Session Processor API',
     version: '1.0.0',
     endpoints: {
-      'POST /process': 'Process chat sessions for a given date',
+      'POST /process': 'Process chat sessions for a given date and return all results',
       'GET /health': 'Health check endpoint'
     }
   });
@@ -431,7 +415,7 @@ app.get('/health', (req, res) => {
 
 app.post('/process', async (req, res) => {
   try {
-    const { date, output_filename } = req.body;
+    const { date } = req.body;
     
     if (!date) {
       return res.status(400).json({
@@ -453,7 +437,7 @@ app.post('/process', async (req, res) => {
     
     log(`Processing request for date: ${date}`, 'PROCESS');
     
-    const result = await getSessionsAndProcessWithAgent(date, output_filename);
+    const result = await getSessionsAndProcessWithAgent(date);
     
     if (result.success) {
       res.json(result);
