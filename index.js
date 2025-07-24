@@ -397,7 +397,7 @@ function calculateSessionScore(analysis) {
     };
 }
 
-// Function to calculate aggregate statistics
+// Function to calculate aggregate statistics - UPDATED with additional distributions
 function calculateAggregateStats(analysisResults) {
     if (!analysisResults || analysisResults.length === 0) {
         return {
@@ -409,7 +409,12 @@ function calculateAggregateStats(analysisResults) {
             average_user_effort_level: 0,
             average_response_accuracy: {},
             average_issue_resolution_rate: { "resolved": 0, "unresolved": 0 },
-            average_human_escalation_rate: { "yes": 0, "no": 0 }
+            average_human_escalation_rate: { "yes": 0, "no": 0 },
+            overall_response_quality_distribution: {},
+            escalation_necessity_distribution: {},
+            response_quality_distribution: {},
+            performance_distribution: {},
+            response_components_distribution: {}
         };
     }
     
@@ -423,7 +428,16 @@ function calculateAggregateStats(analysisResults) {
         user_effort_levels: [],
         accuracy_levels: {},
         issue_resolution: { "resolved": 0, "unresolved": 0 },
-        human_escalation: { "yes": 0, "no": 0 }
+        human_escalation: { "yes": 0, "no": 0 },
+        overall_response_quality: {},
+        escalation_necessity: {},
+        performance_classification: {},
+        response_components: {
+            is_clear: { "yes": 0, "no": 0 },
+            is_concise: { "yes": 0, "no": 0 },
+            is_easy_to_understand: { "yes": 0, "no": 0 },
+            is_relevant: { "yes": 0, "no": 0 }
+        }
     };
     
     analysisResults.forEach(result => {
@@ -480,6 +494,35 @@ function calculateAggregateStats(analysisResults) {
             const escalated = analysis.human_escalation.is_escalated.toLowerCase();
             stats.human_escalation[escalated] = (stats.human_escalation[escalated] || 0) + 1;
         }
+        
+        // NEW: Overall response quality distribution
+        if (analysis.response_quality?.overall_quality_score) {
+            const quality = analysis.response_quality.overall_quality_score.toLowerCase();
+            stats.overall_response_quality[quality] = (stats.overall_response_quality[quality] || 0) + 1;
+        }
+        
+        // NEW: Escalation necessity distribution
+        if (analysis.escalation_necessity?.was_escalation_necessary) {
+            const necessity = analysis.escalation_necessity.was_escalation_necessary.toLowerCase();
+            stats.escalation_necessity[necessity] = (stats.escalation_necessity[necessity] || 0) + 1;
+        }
+        
+        // NEW: Performance distribution (latency classification)
+        if (analysis.overall_latency_classification) {
+            const performance = analysis.overall_latency_classification.toLowerCase();
+            stats.performance_classification[performance] = (stats.performance_classification[performance] || 0) + 1;
+        }
+        
+        // NEW: Response components distribution
+        if (analysis.response_quality) {
+            const components = ['is_clear', 'is_concise', 'is_easy_to_understand', 'is_relevant'];
+            components.forEach(component => {
+                if (analysis.response_quality[component]) {
+                    const value = analysis.response_quality[component].toLowerCase();
+                    stats.response_components[component][value] = (stats.response_components[component][value] || 0) + 1;
+                }
+            });
+        }
     });
     
     // Convert counts to percentages and calculate averages
@@ -487,6 +530,15 @@ function calculateAggregateStats(analysisResults) {
         const result = {};
         Object.keys(obj).forEach(key => {
             result[key] = Math.round((obj[key] / totalSessions) * 100);
+        });
+        return result;
+    };
+    
+    // Convert response components to percentages
+    const convertResponseComponentsToPercentages = (componentsObj) => {
+        const result = {};
+        Object.keys(componentsObj).forEach(component => {
+            result[component] = convertToPercentages(componentsObj[component]);
         });
         return result;
     };
@@ -504,7 +556,11 @@ function calculateAggregateStats(analysisResults) {
             : 0,
         average_response_accuracy: convertToPercentages(stats.accuracy_levels),
         average_issue_resolution_rate: convertToPercentages(stats.issue_resolution),
-        average_human_escalation_rate: convertToPercentages(stats.human_escalation)
+        average_human_escalation_rate: convertToPercentages(stats.human_escalation),
+        overall_response_quality_distribution: convertToPercentages(stats.overall_response_quality),
+        escalation_necessity_distribution: convertToPercentages(stats.escalation_necessity),
+        performance_distribution: convertToPercentages(stats.performance_classification),
+        response_components_distribution: convertResponseComponentsToPercentages(stats.response_components)
     };
 }
 
@@ -780,4 +836,10 @@ app.listen(PORT, () => {
     console.log('- Response Quality Metrics: 20% weight');
     console.log('- User Satisfaction Indicators: 10% weight');
     console.log('- Bonus/Penalty factors included');
+    
+    console.log('📈 Additional Distributions Included:');
+    console.log('- Overall Response Quality Distribution');
+    console.log('- Escalation Necessity Distribution');
+    console.log('- Performance Distribution (Latency)');
+    console.log('- Response Components Distribution');
 });
